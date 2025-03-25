@@ -1,7 +1,7 @@
 const std = @import("std");
 const gl = @import("zopengl").bindings;
 const zm = @import("zmath");
-const math = @import("math.zig");
+const zmx = @import("zmx.zig");
 
 const Self = @This();
 
@@ -97,7 +97,7 @@ pub fn setVector2f(self: Self, name: [:0]const u8, x: f32, y: f32, use_shader: b
     );
 }
 
-pub fn setVector2fv(self: Self, name: [:0]const u8, value: math.Vec2, use_shader: bool) void {
+pub fn setVector2fv(self: Self, name: [:0]const u8, value: zmx.Vec2, use_shader: bool) void {
     if (use_shader) self.use();
     gl.uniform2fv(
         gl.getUniformLocation(self.id, name),
@@ -116,12 +116,13 @@ pub fn setVector3f(self: Self, name: [:0]const u8, x: f32, y: f32, z: f32, use_s
     );
 }
 
-pub fn setVector3fv(self: Self, name: [:0]const u8, value: math.Vec3, use_shader: bool) void {
+pub fn setVector3fv(self: Self, name: [:0]const u8, value: zmx.Vec3, use_shader: bool) void {
     if (use_shader) self.use();
+    var arr: [3]f32 = .{ value[0], value[1], value[2] };
     gl.uniform3fv(
         gl.getUniformLocation(self.id, name),
         1,
-        &value,
+        &arr,
     );
 }
 
@@ -136,7 +137,7 @@ pub fn setVector4f(self: Self, name: [:0]const u8, x: f32, y: f32, z: f32, w: f3
     );
 }
 
-pub fn setVector4fv(self: Self, name: [:0]const u8, value: math.Vec4, use_shader: bool) void {
+pub fn setVector4fv(self: Self, name: [:0]const u8, value: zmx.Vec4, use_shader: bool) void {
     if (use_shader) self.use();
     gl.uniform4fv(
         gl.getUniformLocation(self.id, name),
@@ -145,13 +146,15 @@ pub fn setVector4fv(self: Self, name: [:0]const u8, value: math.Vec4, use_shader
     );
 }
 
-pub fn setMatrix4(self: Self, name: [:0]const u8, value: zm.Mat, use_shader: bool) void {
+pub fn setMatrix(self: Self, name: [:0]const u8, value: zm.Mat, use_shader: bool) void {
     if (use_shader) self.use();
+    var mat: [16]f32 = undefined;
+    zm.storeMat(&mat, value);
     gl.uniformMatrix4fv(
         gl.getUniformLocation(self.id, name),
         1,
-        false,
-        &value,
+        gl.FALSE,
+        &mat,
     );
 }
 

@@ -3,13 +3,14 @@ const glfw = @import("zglfw");
 const zopengl = @import("zopengl");
 const gl = zopengl.bindings;
 const Game = @import("Game.zig");
-const ResourceManager = @import("resource_manager.zig").ResourceManager;
+const ResourceManager = @import("ResourceManager.zig");
+const stbi = @import("zstbi");
+const gui = @import("zgui");
 const builtin = @import("builtin");
 
 const WINDOW_WIDTH = 800;
 const WINDOW_HEIGHT = 600;
 var game: Game = undefined;
-var resource_manager: ResourceManager = undefined;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -62,12 +63,32 @@ pub fn main() !void {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+    stbi.init(allocator);
+    defer stbi.deinit();
+
+    // zgui: init
+    gui.init(allocator);
+    defer gui.deinit();
+
+    gui.io.setConfigFlags(.{
+        .viewport_enable = true,
+        .dock_enable = true,
+    });
+
+    gui.backend.init(window);
+    defer gui.backend.deinit();
+
     // Resources
-    resource_manager = ResourceManager.init(allocator);
+    var resource_manager = ResourceManager.init(allocator);
     defer resource_manager.deinit();
 
     // Game
-    game = Game.init(WINDOW_WIDTH, WINDOW_HEIGHT);
+    game = Game.init(
+        WINDOW_WIDTH,
+        WINDOW_HEIGHT,
+        &resource_manager,
+    );
+    try game.prepare();
     defer game.deinit();
 
     var delta_time: f32 = 0.0;
@@ -85,6 +106,22 @@ pub fn main() !void {
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
         game.render();
+        { // zgui
+            const framebuffer_size = window.getFramebufferSize();
+
+            gui.backend.newFrame(@intCast(framebuffer_size[0]), @intCast(framebuffer_size[1]));
+
+            game.renderUI();
+
+            gui.backend.draw();
+
+            { // Enable Multi-Viewports
+                const ctx = glfw.getCurrentContext();
+                gui.updatePlatformWindows();
+                gui.renderPlatformWindowsDefault();
+                glfw.makeContextCurrent(ctx);
+            }
+        }
 
         window.swapBuffers();
     }

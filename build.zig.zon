@@ -1,7 +1,7 @@
 .{
-    .name = .zarmat,
+    .name = .blockbreaker,
     .version = "0.0.0",
-    .fingerprint = 0x159e0e5e0ee821fc, // Changing this has security and trust implications.
+    .fingerprint = 0x47795c18261ff928, // Changing this has security and trust implications.
     .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .zopengl = .{

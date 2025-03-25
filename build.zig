@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const exe = b.addExecutable(.{
-        .name = "zarmat",
+        .name = "blockbreaker",
         .root_module = exe_mod,
     });
     configGameDevDeps(b, exe, target);
@@ -34,7 +34,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
 }
 
-// TODO: this should only be called for the engine i think, the game should use the abstraction
 fn configGameDevDeps(b: *std.Build, artifact: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
     //---zglfw
     const zglfw = b.dependency("zglfw", .{

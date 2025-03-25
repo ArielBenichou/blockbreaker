@@ -1,0 +1,9 @@
+# zig
+zig-out
+.zig-cache
+
+# imgui - should i ignore it?
+imgui.ini
+
+# mac
+.DS_Store

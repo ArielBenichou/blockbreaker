@@ -1,0 +1,37 @@
+.{
+    .name = .zarmat,
+    .version = "0.0.0",
+    .fingerprint = 0x159e0e5e0ee821fc, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{
+        .zopengl = .{
+            .url = "https://github.com/zig-gamedev/zopengl/archive/refs/heads/main.tar.gz",
+            .hash = "zopengl-0.6.0-dev-AAAAAOVOCAAMiUlq4Tq-nbabSmXc1W54IE4Qyv6KJEWX",
+        },
+        .zglfw = .{
+            .url = "https://github.com/zig-gamedev/zglfw/archive/refs/heads/main.tar.gz",
+            .hash = "zglfw-0.10.0-dev-AAAAAHCZIQDKD8WFiNvMOOz7fasj8oG6Vajcdtbv0yr9",
+        },
+        .system_sdk = .{
+            .url = "https://github.com/zig-gamedev/system-sdk/archive/refs/heads/main.tar.gz",
+            .hash = "system_sdk-0.3.0-dev-AAAAAFAaaAJHqSmMTJ3UM4nUGNaCbUabGSJGuglEEClk",
+        },
+        .zstbi = .{
+            .url = "https://github.com/zig-gamedev/zstbi/archive/refs/heads/main.tar.gz",
+            .hash = "zstbi-0.10.0-AAAAAL2VBwCAQYZQ7se9iRdJUp_RPJmhGBgfrIcVA1_c",
+        },
+        .zmath = .{
+            .url = "https://github.com/zig-gamedev/zmath/archive/refs/heads/main.tar.gz",
+            .hash = "zmath-0.11.0-dev-AAAAAIk0AwDBq30eSRBvWcattABL79uVUlpyBWNkpmN1",
+        },
+        .zgui = .{
+            .url = "https://github.com/zig-gamedev/zgui/archive/refs/heads/main.tar.gz",
+            .hash = "zgui-0.6.0-dev--L6sZOKHaAAOm8AcMfPrQ_qR_sKT-ACvNqpsZDYbojz_",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

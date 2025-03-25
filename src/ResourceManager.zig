@@ -77,26 +77,23 @@ pub fn getTexture(self: Self, name: [:0]const u8) Texture {
 
 fn loadShaderFromFile(allocator: std.mem.Allocator, v_path: [:0]const u8, f_path: [:0]const u8, g_path: ?[:0]const u8) !Shader {
     const MAX_FILE_SIZE = ((1 << 10) << 10) * 1; // 1 MB
-    const v_code = str: {
-        const file = try std.fs.cwd().openFile(v_path, .{});
-        defer file.close();
-        const contents = try file.readToEndAlloc(allocator, MAX_FILE_SIZE);
-        break :str contents;
-    };
+    const v_code = try std.fs.cwd().readFileAlloc(
+        allocator,
+        v_path,
+        MAX_FILE_SIZE,
+    );
     defer allocator.free(v_code);
-    const f_code = str: {
-        const file = try std.fs.cwd().openFile(f_path, .{});
-        defer file.close();
-        const contents = try file.readToEndAlloc(allocator, MAX_FILE_SIZE);
-        break :str contents;
-    };
+    const f_code = try std.fs.cwd().readFileAlloc(
+        allocator,
+        f_path,
+        MAX_FILE_SIZE,
+    );
     defer allocator.free(f_code);
-    const g_code = if (g_path) |path| str: {
-        const file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-        const contents = try file.readToEndAlloc(allocator, MAX_FILE_SIZE);
-        break :str contents;
-    } else null;
+    const g_code = if (g_path) |path| try std.fs.cwd().readFileAlloc(
+        allocator,
+        path,
+        MAX_FILE_SIZE,
+    ) else null;
     defer if (g_code) |code| allocator.free(code);
     const shader = Shader.init();
     shader.compile(v_code, f_code, g_code);
@@ -110,7 +107,15 @@ fn loadTextureFromFile(path: [:0]const u8, with_alpha: bool) !Texture {
         texture.image_format = gl.RGBA;
     }
 
-    var image = try stbi.Image.loadFromFile(path, 0);
+    var image = stbi.Image.loadFromFile(path, 0) catch |err| {
+        return switch (err) {
+            error.ImageInitFailed => {
+                std.log.err("Texture not found: '{s}'", .{path});
+                unreachable;
+            },
+            else => return err,
+        };
+    };
     defer image.deinit();
 
     texture.generate(

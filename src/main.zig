@@ -84,6 +84,7 @@ pub fn main() !void {
 
     // Game
     game = Game.init(
+        allocator,
         WINDOW_WIDTH,
         WINDOW_HEIGHT,
         &resource_manager,

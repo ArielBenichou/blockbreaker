@@ -101,6 +101,9 @@ fn setup(
     const height = tile_data.items.len;
     const width = tile_data.items[0].items.len;
 
+    // FIXME: here is why if we have a wide screen, the bricks are stretched
+    // on the other side, the level decide the aspect ration, so maybe we should
+    // draw black bars on the edges of the screen to maintain the aspect ratio
     const unit_width = level_width / @as(f32, @floatFromInt(width));
     const unit_height = level_height / @as(f32, @floatFromInt(height));
 

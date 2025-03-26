@@ -8,8 +8,8 @@ const stbi = @import("zstbi");
 const gui = @import("zgui");
 const builtin = @import("builtin");
 
-const WINDOW_WIDTH = 800;
-const WINDOW_HEIGHT = 600;
+const WINDOW_WIDTH = 800 * 1.5;
+const WINDOW_HEIGHT = 600 * 1.5;
 var game: Game = undefined;
 
 pub fn main() !void {

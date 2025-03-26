@@ -5,11 +5,18 @@ const SpriteRenderer = @import("SpriteRenderer.zig");
 const ResourceManager = @import("ResourceManager.zig");
 const GameLevel = @import("GameLevel.zig");
 const GameObject = @import("GameObject.zig");
+const BallObject = @import("BallObject.zig");
 const zm = @import("zmath");
+const collision = @import("collision.zig");
 const glfw = @import("zglfw");
 const glx = @import("glx.zig");
 const gui = @import("zgui");
 const zmx = @import("zmx.zig");
+
+const INITIAL_PADDLE_SIZE: zmx.Vec2 = .{ 100, 20 };
+const INITIAL_PADDLE_SPEED: zmx.Vec2 = .{ 500, 0 };
+const INITIAL_BALL_VELOCITY: zmx.Vec2 = .{ 100, -350 };
+const BALL_RADIUS: f32 = 12.5;
 
 const Self = @This();
 
@@ -17,8 +24,9 @@ state: GameState,
 renderer: ?SpriteRenderer,
 levels: ArrayList(GameLevel),
 level_index: usize,
-player: GameObject,
-player_vel: zmx.Vec2 = .{ 500, 0 },
+paddle: GameObject,
+paddle_speed: zmx.Vec2 = INITIAL_PADDLE_SPEED,
+ball: BallObject,
 /// reference to the resource manager singleton
 resource_manager: *ResourceManager,
 keys: [1024]bool,
@@ -42,7 +50,8 @@ pub fn init(
         .levels = ArrayList(GameLevel).init(allocator),
         .level_index = 0,
         .allocator = allocator,
-        .player = undefined,
+        .paddle = undefined,
+        .ball = undefined,
     };
 }
 
@@ -113,22 +122,34 @@ pub fn prepare(self: *Self) !void {
         try self.levels.append(level);
     }
 
-    const player_size: zmx.Vec2 = .{ 100, 20 };
-    const player_pos: zmx.Vec2 = .{
-        @as(f32, @floatFromInt(self.width)) / 2 - player_size[0] / 2,
-        @as(f32, @floatFromInt(self.height)) - player_size[1],
+    const paddle_size: zmx.Vec2 = INITIAL_PADDLE_SIZE;
+    const paddle_pos: zmx.Vec2 = .{
+        @as(f32, @floatFromInt(self.width)) / 2 - paddle_size[0] / 2,
+        @as(f32, @floatFromInt(self.height)) - paddle_size[1],
     };
-    self.player = GameObject.init(
-        player_pos,
-        player_size,
+    self.paddle = GameObject.init(
+        paddle_pos,
+        paddle_size,
         self.resource_manager.getTexture("paddle"),
         .{ 1, 1, 1 },
     );
+
+    const ball_pos: zmx.Vec2 = .{ paddle_pos[0] + paddle_size[0] / 2 - BALL_RADIUS, paddle_pos[1] - BALL_RADIUS * 2 };
+    self.ball = BallObject.init(
+        ball_pos,
+        BALL_RADIUS,
+        INITIAL_BALL_VELOCITY,
+        self.resource_manager.getTexture("face"),
+    );
 }
 
-pub fn update(self: Self, dt: f32) void {
-    _ = self;
-    _ = dt;
+pub fn update(self: *Self, dt: f32) void {
+    _ = self.ball.move(dt, @floatFromInt(self.width));
+    self.doCollisions();
+    if (self.ball.game_object.position[1] >= @as(f32, @floatFromInt(self.height))) {
+        self.resetLevel();
+        self.resetPlayer();
+    }
 }
 
 pub fn render(self: *Self) void {
@@ -141,7 +162,8 @@ pub fn render(self: *Self) void {
             .{ 1, 1, 1 },
         );
         self.levels.items[self.level_index].draw(&self.renderer.?);
-        self.player.draw(&self.renderer.?);
+        self.paddle.draw(&self.renderer.?);
+        self.ball.game_object.draw(&self.renderer.?);
     }
 
     glx.glLogErrors(@src());
@@ -152,19 +174,139 @@ pub fn renderUI(self: *Self) void {
 }
 
 pub fn processInput(self: *Self, dt: f32) void {
+    // quick change level with num 1-4
+    if (self.keys[@intFromEnum(glfw.Key.one)]) {
+        self.selectLevel(0);
+    }
+    if (self.keys[@intFromEnum(glfw.Key.two)]) {
+        self.selectLevel(1);
+    }
+    if (self.keys[@intFromEnum(glfw.Key.three)]) {
+        self.selectLevel(2);
+    }
+    if (self.keys[@intFromEnum(glfw.Key.four)]) {
+        self.selectLevel(3);
+    }
+
     if (self.state == .active) {
-        const vel = self.player_vel * zm.splat(zmx.Vec2, dt);
+        const vel = self.paddle_speed[0] * dt;
         if (self.keys[@intFromEnum(glfw.Key.a)]) {
-            if (self.player.position[0] >= 0) {
-                self.player.position[0] -= vel[0];
+            if (self.paddle.position[0] >= 0) {
+                self.paddle.position[0] -= vel;
+                if (self.ball.is_stuck) {
+                    self.ball.game_object.position[0] -= vel;
+                }
             }
         }
         if (self.keys[@intFromEnum(glfw.Key.d)]) {
-            if (self.player.position[0] <= @as(f32, @floatFromInt(self.width)) - self.player.size[0]) {
-                self.player.position[0] += vel[0];
+            if (self.paddle.position[0] <= @as(f32, @floatFromInt(self.width)) - self.paddle.size[0]) {
+                self.paddle.position[0] += vel;
+                if (self.ball.is_stuck) {
+                    self.ball.game_object.position[0] += vel;
+                }
+            }
+        }
+        if (self.keys[@intFromEnum(glfw.Key.space)]) {
+            self.ball.is_stuck = false;
+        }
+    }
+}
+
+pub fn doCollisions(self: *Self) void {
+    { // BRICK COLLISIONS
+        const level = self.levels.items[self.level_index];
+        const bricks = level.bricks;
+        for (bricks.items) |*brick| {
+            if (!brick.is_destroyed) {
+                const col = collision.isCollidingCircle(brick.*, .{
+                    .position = self.ball.game_object.position,
+                    .radius = self.ball.radius,
+                });
+                if (col.is_colliding) {
+                    if (!brick.is_solid) {
+                        brick.is_destroyed = true;
+                    }
+                    switch (col.direction) {
+                        .left, .right => {
+                            self.ball.game_object.velocity[0] = -self.ball.game_object.velocity[0];
+                            const penetration = self.ball.radius - @abs(col.difference[0]);
+                            if (col.direction == .left) {
+                                self.ball.game_object.position[0] += penetration;
+                            } else {
+                                self.ball.game_object.position[0] -= penetration;
+                            }
+                        },
+                        .up, .down => {
+                            self.ball.game_object.velocity[1] = -self.ball.game_object.velocity[1];
+                            const penetration = self.ball.radius - @abs(col.difference[1]);
+                            if (col.direction == .up) {
+                                self.ball.game_object.position[1] -= penetration;
+                            } else {
+                                self.ball.game_object.position[1] += penetration;
+                            }
+                        },
+                    }
+                }
             }
         }
     }
+
+    { // PADDLE COLLISIONS
+
+        const col = collision.isCollidingCircle(self.paddle, .{
+            .position = self.ball.game_object.position,
+            .radius = self.ball.radius,
+        });
+        if (!self.ball.is_stuck and col.is_colliding) {
+            const center_paddle = self.paddle.position[0] + self.paddle.size[0] / 2;
+            const distance = (self.ball.game_object.position[0] + self.ball.radius) - center_paddle;
+            const percentage = distance / (self.paddle.size[0] / 2);
+            const strength = 2.0;
+            const old_velocity = self.ball.game_object.velocity;
+            self.ball.game_object.velocity[0] = INITIAL_BALL_VELOCITY[0] * percentage * strength;
+            self.ball.game_object.velocity[1] = -1 * @abs(old_velocity[1]);
+            // Ball->Velocity = glm::normalize(Ball->Velocity) * glm::length(oldVelocity);
+
+            const norm = zm.normalize2(zmx.vec2ToVec(self.ball.game_object.velocity)) * zm.length2(zmx.vec2ToVec(old_velocity));
+            self.ball.game_object.velocity = .{ norm[0], norm[1] };
+        }
+    }
+}
+
+fn resetLevel(self: *Self) void {
+    const level_names = [_][]const u8{
+        "res/levels/one.lvl",
+        "res/levels/two.lvl",
+        "res/levels/three.lvl",
+        "res/levels/four.lvl",
+    };
+    self.levels.items[self.level_index].load(
+        self.resource_manager,
+        level_names[self.level_index],
+        @floatFromInt(self.width),
+        @floatFromInt(self.height / 2),
+    ) catch unreachable;
+}
+
+fn resetPlayer(self: *Self) void {
+    self.paddle.size = INITIAL_PADDLE_SIZE;
+    self.paddle.position = .{
+        @as(f32, @floatFromInt(self.width)) / 2 - INITIAL_PADDLE_SIZE[0] / 2,
+        @as(f32, @floatFromInt(self.height)) - INITIAL_PADDLE_SIZE[1],
+    };
+    self.ball.reset(
+        .{
+            self.paddle.position[0] + self.paddle.size[0] / 2 - BALL_RADIUS,
+            self.paddle.position[1] - BALL_RADIUS * 2,
+        },
+        INITIAL_BALL_VELOCITY,
+    );
+}
+
+fn selectLevel(self: *Self, level_index: usize) void {
+    self.resetLevel();
+    self.resetPlayer();
+    self.level_index = level_index;
 }
 
 pub const GameState = enum {

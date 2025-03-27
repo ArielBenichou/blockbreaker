@@ -6,6 +6,7 @@ const ResourceManager = @import("ResourceManager.zig");
 const GameLevel = @import("GameLevel.zig");
 const GameObject = @import("GameObject.zig");
 const BallObject = @import("BallObject.zig");
+const ParticleGenerator = @import("particle.zig").ParticleGenerator;
 const zm = @import("zmath");
 const collision = @import("collision.zig");
 const glfw = @import("zglfw");
@@ -14,14 +15,19 @@ const gui = @import("zgui");
 const zmx = @import("zmx.zig");
 
 const INITIAL_PADDLE_SIZE: zmx.Vec2 = .{ 100, 20 };
-const INITIAL_PADDLE_SPEED: zmx.Vec2 = .{ 500, 0 };
-const INITIAL_BALL_VELOCITY: zmx.Vec2 = .{ 100, -350 };
+const INITIAL_PADDLE_SPEED: zmx.Vec2 = .{ 1000, 0 };
+const INITIAL_BALL_VELOCITY: zmx.Vec2 = .{ 0, -500 };
+const BALL_VELOCITY_X: f32 = 1000;
 const BALL_RADIUS: f32 = 12.5;
+
+const NEW_PARTICLE_COUNT: u32 = 2;
+const NEW_PARTICLE_LIFETIME: f32 = 1;
 
 const Self = @This();
 
 state: GameState,
-renderer: ?SpriteRenderer,
+renderer: SpriteRenderer,
+particle_renderer: ParticleGenerator,
 levels: ArrayList(GameLevel),
 level_index: usize,
 paddle: GameObject,
@@ -46,12 +52,13 @@ pub fn init(
         .width = width,
         .height = height,
         .resource_manager = resource_manager,
-        .renderer = null,
         .levels = ArrayList(GameLevel).init(allocator),
         .level_index = 0,
         .allocator = allocator,
         .paddle = undefined,
         .ball = undefined,
+        .renderer = undefined,
+        .particle_renderer = undefined,
     };
 }
 
@@ -60,15 +67,24 @@ pub fn deinit(self: Self) void {
         level.deinit();
     }
     self.levels.deinit();
+    self.particle_renderer.deinit();
 }
 
 pub fn prepare(self: *Self) !void {
+    // SHADERS
     const sprite_shader = try self.resource_manager.loadShader(
         "sprite",
         "res/shaders/sprite.vs.glsl",
         "res/shaders/sprite.fs.glsl",
         null,
     );
+    const particle_shader = try self.resource_manager.loadShader(
+        "particle",
+        "res/shaders/particle.vs.glsl",
+        "res/shaders/particle.fs.glsl",
+        null,
+    );
+    // PROJECTION
     const proj = zm.orthographicOffCenterLhGl(
         0,
         @floatFromInt(self.width),
@@ -77,12 +93,15 @@ pub fn prepare(self: *Self) !void {
         -1,
         1,
     );
+    // SET SHADER UNIFORMS
     sprite_shader.use();
     sprite_shader.setInteger("image", 0, false);
     sprite_shader.setMatrix("projection", proj, false);
+    particle_shader.use();
+    particle_shader.setInteger("sprite", 0, false);
+    particle_shader.setMatrix("projection", proj, false);
 
-    self.renderer = SpriteRenderer.init(sprite_shader);
-
+    // TEXTURES
     _ = try self.resource_manager.loadTexture(
         "res/sprites/background.jpg",
         "background",
@@ -108,7 +127,20 @@ pub fn prepare(self: *Self) !void {
         "paddle",
         true,
     );
+    _ = try self.resource_manager.loadTexture(
+        "res/sprites/particle.png",
+        "particle",
+        true,
+    );
 
+    self.renderer = SpriteRenderer.init(sprite_shader);
+    self.particle_renderer = try ParticleGenerator.init(
+        self.allocator,
+        particle_shader,
+        self.resource_manager.getTexture("particle"),
+        500,
+    );
+    // LEVELS
     const level_names = [_][]const u8{ "one", "two", "three", "four" };
     inline for (level_names) |level_name| {
         const path = "res/levels/" ++ level_name ++ ".lvl";
@@ -146,6 +178,17 @@ pub fn prepare(self: *Self) !void {
 pub fn update(self: *Self, dt: f32) void {
     _ = self.ball.move(dt, @floatFromInt(self.width));
     self.doCollisions();
+    {
+        // if ball velocity is zero (length) we should not spawn particles
+        const vel_scale = @intFromBool(!self.ball.is_stuck);
+        self.particle_renderer.update(
+            dt,
+            &self.ball.game_object,
+            NEW_PARTICLE_COUNT * vel_scale,
+            zm.splat(zmx.Vec2, self.ball.radius),
+            NEW_PARTICLE_LIFETIME,
+        );
+    }
     if (self.ball.game_object.position[1] >= @as(f32, @floatFromInt(self.height))) {
         self.resetLevel();
         self.resetPlayer();
@@ -154,16 +197,17 @@ pub fn update(self: *Self, dt: f32) void {
 
 pub fn render(self: *Self) void {
     if (self.state == .active) {
-        self.renderer.?.drawSprite(
+        self.renderer.drawSprite(
             self.resource_manager.getTexture("background"),
             .{ 0, 0 },
             .{ @floatFromInt(self.width), @floatFromInt(self.height) },
             0,
             .{ 1, 1, 1 },
         );
-        self.levels.items[self.level_index].draw(&self.renderer.?);
-        self.paddle.draw(&self.renderer.?);
-        self.ball.game_object.draw(&self.renderer.?);
+        self.levels.items[self.level_index].draw(&self.renderer);
+        self.paddle.draw(&self.renderer);
+        self.particle_renderer.draw();
+        self.ball.game_object.draw(&self.renderer);
     }
 
     glx.glLogErrors(@src());
@@ -171,6 +215,29 @@ pub fn render(self: *Self) void {
 
 pub fn renderUI(self: *Self) void {
     _ = self;
+    // gui.setNextWindowSize(.{ .w = 300, .h = 150 });
+    // if (gui.begin("Particle Configuration", .{})) {
+    //     var lifetime: f32 = self.new_particle_lifetime;
+    //     if (gui.sliderFloat("Lifetime (seconds)", .{
+    //         .v = &lifetime,
+    //         .min = 0.1,
+    //         .max = 10.0,
+    //         .cfmt = "%.1f",
+    //     })) {
+    //         self.new_particle_lifetime = lifetime;
+    //     }
+
+    //     var count: f32 = @floatFromInt(self.new_particle_count);
+    //     if (gui.sliderFloat("Particle Count", .{
+    //         .v = &count,
+    //         .min = 1,
+    //         .max = 10,
+    //         .cfmt = "%.0f",
+    //     })) {
+    //         self.new_particle_count = @intFromFloat(count);
+    //     }
+    // }
+    // gui.end();
 }
 
 pub fn processInput(self: *Self, dt: f32) void {
@@ -252,7 +319,6 @@ pub fn doCollisions(self: *Self) void {
     }
 
     { // PADDLE COLLISIONS
-
         const col = collision.isCollidingCircle(self.paddle, .{
             .position = self.ball.game_object.position,
             .radius = self.ball.radius,
@@ -261,12 +327,11 @@ pub fn doCollisions(self: *Self) void {
             const center_paddle = self.paddle.position[0] + self.paddle.size[0] / 2;
             const distance = (self.ball.game_object.position[0] + self.ball.radius) - center_paddle;
             const percentage = distance / (self.paddle.size[0] / 2);
-            const strength = 2.0;
+            const strength = 1.0;
             const old_velocity = self.ball.game_object.velocity;
-            self.ball.game_object.velocity[0] = INITIAL_BALL_VELOCITY[0] * percentage * strength;
-            self.ball.game_object.velocity[1] = -1 * @abs(old_velocity[1]);
-            // Ball->Velocity = glm::normalize(Ball->Velocity) * glm::length(oldVelocity);
-
+            self.ball.game_object.velocity[0] = BALL_VELOCITY_X * percentage * strength;
+            // Vertical velocity is always negative - the ceiling (top of screen) is -1
+            self.ball.game_object.velocity[1] = -1 * std.math.clamp(@abs(old_velocity[1]), 500, 1000);
             const norm = zm.normalize2(zmx.vec2ToVec(self.ball.game_object.velocity)) * zm.length2(zmx.vec2ToVec(old_velocity));
             self.ball.game_object.velocity = .{ norm[0], norm[1] };
         }

@@ -99,10 +99,11 @@ pub fn setVector2f(self: Self, name: [:0]const u8, x: f32, y: f32, use_shader: b
 
 pub fn setVector2fv(self: Self, name: [:0]const u8, value: zmx.Vec2, use_shader: bool) void {
     if (use_shader) self.use();
+    var arr: [2]f32 = .{ value[0], value[1] };
     gl.uniform2fv(
         gl.getUniformLocation(self.id, name),
         1,
-        &value,
+        &arr,
     );
 }
 
@@ -137,12 +138,13 @@ pub fn setVector4f(self: Self, name: [:0]const u8, x: f32, y: f32, z: f32, w: f3
     );
 }
 
-pub fn setVector4fv(self: Self, name: [:0]const u8, value: zmx.Vec4, use_shader: bool) void {
+pub fn setVector4fv(self: Self, name: [:0]const u8, value: zm.Vec, use_shader: bool) void {
     if (use_shader) self.use();
+    var arr: [4]f32 = .{ value[0], value[1], value[2], value[3] };
     gl.uniform4fv(
         gl.getUniformLocation(self.id, name),
         1,
-        &value,
+        &arr,
     );
 }
 

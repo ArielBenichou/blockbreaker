@@ -1,5 +1,6 @@
 const std = @import("std");
 const glfw = @import("zglfw");
+const zaudio = @import("zaudio");
 const zopengl = @import("zopengl");
 const gl = zopengl.bindings;
 const Game = @import("Game.zig");
@@ -77,6 +78,20 @@ pub fn main() !void {
 
     gui.backend.init(window);
     defer gui.backend.deinit();
+
+    // zaudio
+    // zaudio.init(allocator);
+    // defer zaudio.deinit();
+
+    // const engine = try zaudio.Engine.create(null);
+    // // FIXME: this cause seg fault
+    // defer engine.destroy();
+    // const music = try engine.createSoundFromFile(
+    //     "res/music/breakout.mp3",
+    //     .{ .flags = .{ .stream = true } },
+    // );
+    // defer music.destroy();
+    // try music.start();
 
     // Resources
     var resource_manager = ResourceManager.init(allocator);

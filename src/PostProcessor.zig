@@ -69,7 +69,7 @@ pub fn init(shader: Shader, width: u32, height: u32) Self {
     self.initRenderData();
     self.postprocessing_shader.setInteger("scene", 0, true);
     // the '300' is kind of the strengh is think, small is stronger
-    const offset: gl.Float = 1 / 300;
+    const offset: gl.Float = 1 / 10;
     // zig fmt: off
     const offsets = [9][2]gl.Float{
         .{ -offset,  offset  },  // top-left

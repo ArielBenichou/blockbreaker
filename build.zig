@@ -64,6 +64,10 @@ fn configGameDevDeps(b: *std.Build, artifact: *std.Build.Step.Compile, target: s
     artifact.root_module.addImport("zgui", zgui.module("root"));
     artifact.linkLibrary(zgui.artifact("imgui"));
 
+    const zaudio = b.dependency("zaudio", .{});
+    artifact.root_module.addImport("zaudio", zaudio.module("root"));
+    artifact.linkLibrary(zaudio.artifact("miniaudio"));
+
     //---system_sdk
     if (target.result.os.tag == .macos) {
         if (b.lazyDependency("system_sdk", .{})) |system_sdk| {

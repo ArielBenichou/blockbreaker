@@ -8,6 +8,7 @@ const GameObject = @import("GameObject.zig");
 const BallObject = @import("BallObject.zig");
 const ParticleGenerator = @import("particle.zig").ParticleGenerator;
 const PostProcessor = @import("PostProcessor.zig");
+const PowerUp = @import("PowerUp.zig");
 const zm = @import("zmath");
 const collision = @import("collision.zig");
 const glfw = @import("zglfw");
@@ -31,6 +32,17 @@ renderer: SpriteRenderer,
 particle_renderer: ParticleGenerator,
 levels: ArrayList(GameLevel),
 level_index: usize,
+power_ups: ArrayList(PowerUp),
+/// player effects (from powerups)
+/// hold timers for each effect, if >0 then apply effect
+powerup_effect: struct {
+    speed: f32 = 0,
+    sticky: f32 = 0,
+    passthrough: f32 = 0,
+    increase: f32 = 0,
+    confuse: f32 = 0,
+    chaos: f32 = 0,
+} = .{},
 paddle: GameObject,
 paddle_speed: zmx.Vec2 = INITIAL_PADDLE_SPEED,
 ball: BallObject,
@@ -57,6 +69,7 @@ pub fn init(
         .resource_manager = resource_manager,
         .levels = ArrayList(GameLevel).init(allocator),
         .level_index = 0,
+        .power_ups = ArrayList(PowerUp).init(allocator),
         .allocator = allocator,
         .paddle = undefined,
         .ball = undefined,
@@ -72,6 +85,7 @@ pub fn deinit(self: Self) void {
     }
     self.levels.deinit();
     self.particle_renderer.deinit();
+    self.power_ups.deinit();
 }
 
 pub fn prepare(self: *Self) !void {
@@ -111,37 +125,83 @@ pub fn prepare(self: *Self) !void {
     particle_shader.setInteger("sprite", 0, false);
     particle_shader.setMatrix("projection", proj, false);
 
+    const TexConfig = struct {
+        path: [:0]const u8,
+        name: [:0]const u8,
+        is_transparent: bool,
+    };
+
     // TEXTURES
-    _ = try self.resource_manager.loadTexture(
-        "res/sprites/background.jpg",
-        "background",
-        false,
-    );
-    _ = try self.resource_manager.loadTexture(
-        "res/sprites/awesome_face.png",
-        "face",
-        true,
-    );
-    _ = try self.resource_manager.loadTexture(
-        "res/sprites/block.png",
-        "block",
-        false,
-    );
-    _ = try self.resource_manager.loadTexture(
-        "res/sprites/block_solid.png",
-        "block_solid",
-        false,
-    );
-    _ = try self.resource_manager.loadTexture(
-        "res/sprites/paddle.png",
-        "paddle",
-        true,
-    );
-    _ = try self.resource_manager.loadTexture(
-        "res/sprites/particle.png",
-        "particle",
-        true,
-    );
+    const textures_to_load = [_]TexConfig{
+        .{
+            .path = "res/sprites/background.jpg",
+            .name = "background",
+            .is_transparent = false,
+        },
+        .{
+            .path = "res/sprites/awesome_face.png",
+            .name = "face",
+            .is_transparent = true,
+        },
+        .{
+            .path = "res/sprites/block.png",
+            .name = "block",
+            .is_transparent = false,
+        },
+        .{
+            .path = "res/sprites/block_solid.png",
+            .name = "block_solid",
+            .is_transparent = false,
+        },
+        .{
+            .path = "res/sprites/paddle.png",
+            .name = "paddle",
+            .is_transparent = true,
+        },
+        .{
+            .path = "res/sprites/particle.png",
+            .name = "particle",
+            .is_transparent = true,
+        },
+        // Powerups
+        .{
+            .path = "res/sprites/powerup_speed.png",
+            .name = "powerup_speed",
+            .is_transparent = true,
+        },
+        .{
+            .path = "res/sprites/powerup_sticky.png",
+            .name = "powerup_sticky",
+            .is_transparent = true,
+        },
+        .{
+            .path = "res/sprites/powerup_passthrough.png",
+            .name = "powerup_passthrough",
+            .is_transparent = true,
+        },
+        .{
+            .path = "res/sprites/powerup_increase.png",
+            .name = "powerup_increase",
+            .is_transparent = true,
+        },
+        .{
+            .path = "res/sprites/powerup_confuse.png",
+            .name = "powerup_confuse",
+            .is_transparent = true,
+        },
+        .{
+            .path = "res/sprites/powerup_chaos.png",
+            .name = "powerup_chaos",
+            .is_transparent = true,
+        },
+    };
+    inline for (textures_to_load) |tex_config| {
+        _ = try self.resource_manager.loadTexture(
+            tex_config.path,
+            tex_config.name,
+            tex_config.is_transparent,
+        );
+    }
 
     // Systems
     self.renderer = SpriteRenderer.init(sprite_shader);
@@ -194,28 +254,75 @@ pub fn prepare(self: *Self) !void {
 }
 
 pub fn update(self: *Self, dt: f32) void {
-    _ = self.ball.move(dt, @floatFromInt(self.width));
-    self.doCollisions();
-    {
+    { // PADDLE
+        if (self.powerup_effect.increase > 0) {
+            self.paddle.size[0] = INITIAL_PADDLE_SIZE[0] + 100;
+        } else {
+            self.paddle.size[0] = INITIAL_PADDLE_SIZE[0];
+        }
+    }
+    { // BALL
+        const mult: f32 = if (self.powerup_effect.speed > 0) 1.5 else 1;
+        _ = self.ball.move(dt, @floatFromInt(self.width), mult);
+    }
+    { // POWERUPS
+        for (self.power_ups.items) |*powerup| {
+            powerup.update(dt, @floatFromInt(self.height));
+        }
+        if (self.powerup_effect.speed > 0) {
+            self.powerup_effect.speed -= dt;
+        }
+        if (self.powerup_effect.sticky > 0) {
+            self.powerup_effect.sticky -= dt;
+        }
+        if (self.powerup_effect.passthrough > 0) {
+            self.powerup_effect.passthrough -= dt;
+        }
+        if (self.powerup_effect.increase > 0) {
+            self.powerup_effect.increase -= dt;
+        }
+    }
+    { // COLLISIONS
+        self.doCollisions();
+    }
+    { // PARTICLES
         // if ball velocity is zero (length) we should not spawn particles
         const vel_scale = @intFromBool(!self.ball.is_stuck);
+        const mult: u32 = if (self.powerup_effect.speed > 0) 2 else 1;
         self.particle_renderer.update(
             dt,
             &self.ball.game_object,
-            NEW_PARTICLE_COUNT * vel_scale,
+            NEW_PARTICLE_COUNT * vel_scale * mult,
             zm.splat(zmx.Vec2, self.ball.radius),
             NEW_PARTICLE_LIFETIME,
         );
     }
+    // LOSE CONDITION
     if (self.ball.game_object.position[1] >= @as(f32, @floatFromInt(self.height))) {
         self.resetLevel();
         self.resetPlayer();
     }
+    // SHAKE
     if (self.shake_time > 0) {
         self.shake_time -= dt;
         if (self.shake_time <= 0) {
             self.postprocessor.shake = false;
         }
+    }
+    // CONFUSE
+    if (self.powerup_effect.confuse > 0) {
+        self.powerup_effect.confuse -= dt;
+        self.postprocessor.confuse = true;
+    } else {
+        self.postprocessor.confuse = false;
+    }
+
+    // CHAOS
+    if (self.powerup_effect.chaos > 0) {
+        self.powerup_effect.chaos -= dt;
+        self.postprocessor.chaos = true;
+    } else {
+        self.postprocessor.chaos = false;
     }
 }
 
@@ -230,8 +337,25 @@ pub fn render(self: *Self) void {
             .{ 1, 1, 1 },
         );
         self.levels.items[self.level_index].draw(&self.renderer);
+        if (self.powerup_effect.sticky > 0) {
+            self.paddle.color = PowerUp.PowerUpType.sticky.color();
+        } else {
+            self.paddle.color = .{ 1, 1, 1 };
+        }
         self.paddle.draw(&self.renderer);
+        for (self.power_ups.items) |*powerup| {
+            if (powerup.is_active) {
+                powerup.game_object.draw(&self.renderer);
+            }
+        }
         self.particle_renderer.draw();
+        if (self.ball.is_stuck and self.powerup_effect.sticky > 0) {
+            self.ball.game_object.color = PowerUp.PowerUpType.sticky.color();
+        } else if (self.powerup_effect.speed > 0) {
+            self.ball.game_object.color = PowerUp.PowerUpType.speed.color();
+        } else {
+            self.ball.game_object.color = .{ 1, 1, 1 };
+        }
         self.ball.game_object.draw(&self.renderer);
         self.postprocessor.endRender();
         self.postprocessor.render(@floatCast(glfw.getTime()));
@@ -269,17 +393,14 @@ pub fn renderUI(self: *Self) void {
 
 pub fn processInput(self: *Self, dt: f32) void {
     // quick change level with num 1-4
+    if (self.keys[@intFromEnum(glfw.Key.n)]) {
+        self.selectLevel(@mod(self.level_index + 1, self.levels.items.len));
+    }
+
     if (self.keys[@intFromEnum(glfw.Key.one)]) {
-        self.selectLevel(0);
-    }
-    if (self.keys[@intFromEnum(glfw.Key.two)]) {
-        self.selectLevel(1);
-    }
-    if (self.keys[@intFromEnum(glfw.Key.three)]) {
-        self.selectLevel(2);
-    }
-    if (self.keys[@intFromEnum(glfw.Key.four)]) {
-        self.selectLevel(3);
+        self.powerup_effect.confuse = 10;
+    } else if (self.keys[@intFromEnum(glfw.Key.two)]) {
+        self.powerup_effect.chaos = 10;
     }
 
     if (self.state == .active) {
@@ -319,29 +440,33 @@ pub fn doCollisions(self: *Self) void {
                 if (col.is_colliding) {
                     if (!brick.is_solid) {
                         brick.is_destroyed = true;
+                        self.spawnPowerUp(brick.position + brick.size / zm.splat(zmx.Vec2, 2));
                     } else {
+                        // SHAKE ON HIT SOLID
                         self.shake_time = 0.1;
                         self.postprocessor.shake = true;
                     }
-                    switch (col.direction) {
-                        .left, .right => {
-                            self.ball.game_object.velocity[0] = -self.ball.game_object.velocity[0];
-                            const penetration = self.ball.radius - @abs(col.difference[0]);
-                            if (col.direction == .left) {
-                                self.ball.game_object.position[0] += penetration;
-                            } else {
-                                self.ball.game_object.position[0] -= penetration;
-                            }
-                        },
-                        .up, .down => {
-                            self.ball.game_object.velocity[1] = -self.ball.game_object.velocity[1];
-                            const penetration = self.ball.radius - @abs(col.difference[1]);
-                            if (col.direction == .up) {
-                                self.ball.game_object.position[1] -= penetration;
-                            } else {
-                                self.ball.game_object.position[1] += penetration;
-                            }
-                        },
+                    if (brick.is_solid or self.powerup_effect.passthrough <= 0) {
+                        switch (col.direction) {
+                            .left, .right => {
+                                self.ball.game_object.velocity[0] = -self.ball.game_object.velocity[0];
+                                const penetration = self.ball.radius - @abs(col.difference[0]);
+                                if (col.direction == .left) {
+                                    self.ball.game_object.position[0] += penetration;
+                                } else {
+                                    self.ball.game_object.position[0] -= penetration;
+                                }
+                            },
+                            .up, .down => {
+                                self.ball.game_object.velocity[1] = -self.ball.game_object.velocity[1];
+                                const penetration = self.ball.radius - @abs(col.difference[1]);
+                                if (col.direction == .up) {
+                                    self.ball.game_object.position[1] -= penetration;
+                                } else {
+                                    self.ball.game_object.position[1] += penetration;
+                                }
+                            },
+                        }
                     }
                 }
             }
@@ -349,21 +474,58 @@ pub fn doCollisions(self: *Self) void {
     }
 
     { // PADDLE COLLISIONS
-        const col = collision.isCollidingCircle(self.paddle, .{
-            .position = self.ball.game_object.position,
-            .radius = self.ball.radius,
-        });
-        if (!self.ball.is_stuck and col.is_colliding) {
-            const center_paddle = self.paddle.position[0] + self.paddle.size[0] / 2;
-            const distance = (self.ball.game_object.position[0] + self.ball.radius) - center_paddle;
-            const percentage = distance / (self.paddle.size[0] / 2);
-            const strength = 1.0;
-            const old_velocity = self.ball.game_object.velocity;
-            self.ball.game_object.velocity[0] = BALL_VELOCITY_X * percentage * strength;
-            // Vertical velocity is always negative - the ceiling (top of screen) is -1
-            self.ball.game_object.velocity[1] = -1 * std.math.clamp(@abs(old_velocity[1]), 500, 1000);
-            const norm = zm.normalize2(zmx.vec2ToVec(self.ball.game_object.velocity)) * zm.length2(zmx.vec2ToVec(old_velocity));
-            self.ball.game_object.velocity = .{ norm[0], norm[1] };
+        { // \w BALL
+            const col = collision.isCollidingCircle(self.paddle, .{
+                .position = self.ball.game_object.position,
+                .radius = self.ball.radius,
+            });
+            if (col.is_colliding) {
+                if (self.powerup_effect.sticky > 0) {
+                    self.ball.is_stuck = true;
+                    self.ball.game_object.velocity = INITIAL_BALL_VELOCITY;
+                } else if (!self.ball.is_stuck) {
+                    const center_paddle = self.paddle.position[0] + self.paddle.size[0] / 2;
+                    const distance = (self.ball.game_object.position[0] + self.ball.radius) - center_paddle;
+                    const percentage = distance / (self.paddle.size[0] / 2);
+                    const strength = 1.0;
+                    const old_velocity = self.ball.game_object.velocity;
+                    self.ball.game_object.velocity[0] = BALL_VELOCITY_X * percentage * strength;
+                    // Vertical velocity is always negative - the ceiling (top of screen) is -1
+                    self.ball.game_object.velocity[1] = -1 * std.math.clamp(@abs(old_velocity[1]), 500, 1000);
+                    const norm = zm.normalize2(zmx.vec2ToVec(self.ball.game_object.velocity)) * zm.length2(zmx.vec2ToVec(old_velocity));
+                    self.ball.game_object.velocity = .{ norm[0], norm[1] };
+                }
+            }
+        }
+        { // \w POWERUP
+            for (self.power_ups.items) |*powerup| {
+                const is_colliding = collision.isCollidingAABB(self.paddle, powerup.game_object);
+                if (is_colliding) {
+                    if (powerup.is_active) {
+                        powerup.is_active = false;
+                        switch (powerup.powerup_type) {
+                            .speed => {
+                                self.powerup_effect.speed = powerup.powerup_type.duration();
+                            },
+                            .sticky => {
+                                self.powerup_effect.sticky = powerup.powerup_type.duration();
+                            },
+                            .passthrough => {
+                                self.powerup_effect.passthrough = powerup.powerup_type.duration();
+                            },
+                            .increase => {
+                                self.powerup_effect.increase = powerup.powerup_type.duration();
+                            },
+                            .confuse => {
+                                self.powerup_effect.confuse = powerup.powerup_type.duration();
+                            },
+                            .chaos => {
+                                self.powerup_effect.chaos = powerup.powerup_type.duration();
+                            },
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -381,6 +543,11 @@ fn resetLevel(self: *Self) void {
         @floatFromInt(self.width),
         @floatFromInt(self.height / 2),
     ) catch unreachable;
+
+    for (self.power_ups.items) |*powerup| {
+        powerup.is_active = false;
+    }
+    self.powerup_effect = .{};
 }
 
 fn resetPlayer(self: *Self) void {
@@ -402,6 +569,41 @@ fn selectLevel(self: *Self, level_index: usize) void {
     self.resetLevel();
     self.resetPlayer();
     self.level_index = level_index;
+}
+
+fn spawnPowerUp(self: *Self, position: zmx.Vec2) void {
+    var prng = std.Random.DefaultPrng.init(@intCast(std.time.milliTimestamp()));
+    var rng = prng.random();
+    const success_chance = 0.5;
+    if (rng.float(f32) <= success_chance) {
+        const powerup_type = rng.enumValue(PowerUp.PowerUpType);
+        const size = INITIAL_PADDLE_SIZE / zm.splat(zmx.Vec2, 2);
+        const pos = position - size / zm.splat(zmx.Vec2, 2);
+        const tex = self.resource_manager.getTexture(powerup_type.name());
+        // first we try to find an inactive powerup, and "respawn" it
+        const has_reused = reuse_powerup: {
+            for (self.power_ups.items) |*powerup| {
+                if (!powerup.is_active) {
+                    powerup.reuse(
+                        pos,
+                        size,
+                        tex,
+                        powerup_type,
+                    );
+                    break :reuse_powerup true;
+                }
+            }
+            break :reuse_powerup false;
+        };
+        if (!has_reused) {
+            self.power_ups.append(PowerUp.init(
+                pos,
+                size,
+                tex,
+                powerup_type,
+            )) catch unreachable;
+        }
+    }
 }
 
 pub const GameState = enum {

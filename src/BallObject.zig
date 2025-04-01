@@ -34,10 +34,10 @@ pub fn initDefault(texture: Texture) Self {
     };
 }
 
-pub fn move(self: *Self, delta_time: f32, window_width: f32) zmx.Vec2 {
+pub fn move(self: *Self, delta_time: f32, window_width: f32, mult: f32) zmx.Vec2 {
     if (!self.is_stuck) {
         // update position by velocity
-        self.game_object.position += self.game_object.velocity * zm.splat(zmx.Vec2, delta_time);
+        self.game_object.position += self.game_object.velocity * zm.splat(zmx.Vec2, delta_time * mult);
 
         // check for collisions with walls and bounce if necessary
         if (self.game_object.position[0] <= 0.0) {

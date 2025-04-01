@@ -2,7 +2,7 @@ const std = @import("std");
 const gl = @import("zopengl").bindings;
 const Shader = @import("Shader.zig");
 const Texture = @import("Texture.zig");
-
+const zm = @import("zmath");
 const Self = @This();
 postprocessing_shader: Shader,
 texture: Texture,
@@ -68,17 +68,18 @@ pub fn init(shader: Shader, width: u32, height: u32) Self {
 
     self.initRenderData();
     self.postprocessing_shader.setInteger("scene", 0, true);
+    // the '300' is kind of the strengh is think, small is stronger
     const offset: gl.Float = 1 / 300;
     // zig fmt: off
     const offsets = [9][2]gl.Float{
         .{ -offset,  offset  },  // top-left
-        .{  0.0,    offset  },  // top-center
+        .{  0.0,     offset  },  // top-center
         .{  offset,  offset  },  // top-right
-        .{ -offset,  0.0    },  // center-left
-        .{  0.0,    0.0    },  // center-center
-        .{  offset,  0.0    },  // center - right
+        .{ -offset,  0.0     },  // center-left
+        .{  0.0,     0.0     },  // center-center
+        .{  offset,  0.0     },  // center - right
         .{ -offset, -offset  },  // bottom-left
-        .{  0.0,   -offset  },  // bottom-center
+        .{  0.0,    -offset  },  // bottom-center
         .{  offset, -offset  },   // bottom-right     
     };
     // zig fmt: on
@@ -90,7 +91,7 @@ pub fn init(shader: Shader, width: u32, height: u32) Self {
     // zig fmt: off
     const edge_kernel = [9]gl.Int{
         -1, -1, -1,
-        -1,  8, -1,
+        -1,  9, -1,
         -1, -1, -1,
     };
     // zig fmt: on

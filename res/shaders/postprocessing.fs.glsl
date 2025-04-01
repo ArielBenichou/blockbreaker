@@ -12,25 +12,25 @@ uniform bool confuse;
 uniform bool shake;
 
 void main() {
-    color = vec4(0.0);
+    color = vec4(vec3(0.0f), 1.0f);
     vec3 sample[9];
-    if(chaos || shake) {
+    if (chaos || shake) {
         for (int i = 0; i < 9; i++) {
-            sample[i] = vec3(texture(scene, TexCoords.st + offsets[i]));
+            sample[i] = vec3(texture(scene, TexCoords + offsets[i]));
         }
     }
-    if(chaos) {
+    if (chaos) {
         for (int i = 0; i < 9; i++) {
-            color += vec4(sample[i] * edge_kernel[i], 1.0);
+            color += vec4(sample[i] * edge_kernel[i], 0.0f);
         }
-        color.a = 1.0f;
+        color.a = texture(scene, TexCoords).a;
     } else if (confuse) {
-        color = vec4(1.0 - texture(scene, TexCoords).rgb, 1.0);
+        color = vec4(1.0f - texture(scene, TexCoords).rgb, 1.0f);
     } else if (shake) {
         for (int i = 0; i < 9; i++) {
-            color += vec4(sample[i] * blur_kernel[i], 0.0);
+            color += vec4(sample[i] * blur_kernel[i], 0.0f);
         }
-        color.a = 1.0f;
+        color.a = texture(scene, TexCoords).a;
     } else {
         color = texture(scene, TexCoords);
     }

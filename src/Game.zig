@@ -7,6 +7,7 @@ const GameLevel = @import("GameLevel.zig");
 const GameObject = @import("GameObject.zig");
 const BallObject = @import("BallObject.zig");
 const ParticleGenerator = @import("particle.zig").ParticleGenerator;
+const PostProcessor = @import("PostProcessor.zig");
 const zm = @import("zmath");
 const collision = @import("collision.zig");
 const glfw = @import("zglfw");
@@ -33,8 +34,10 @@ level_index: usize,
 paddle: GameObject,
 paddle_speed: zmx.Vec2 = INITIAL_PADDLE_SPEED,
 ball: BallObject,
+shake_time: f32 = 0,
 /// reference to the resource manager singleton
 resource_manager: *ResourceManager,
+postprocessor: PostProcessor,
 keys: [1024]bool,
 width: u32,
 height: u32,
@@ -59,6 +62,7 @@ pub fn init(
         .ball = undefined,
         .renderer = undefined,
         .particle_renderer = undefined,
+        .postprocessor = undefined,
     };
 }
 
@@ -82,6 +86,12 @@ pub fn prepare(self: *Self) !void {
         "particle",
         "res/shaders/particle.vs.glsl",
         "res/shaders/particle.fs.glsl",
+        null,
+    );
+    const postprocessing_shader = try self.resource_manager.loadShader(
+        "postprocessing",
+        "res/shaders/postprocessing.vs.glsl",
+        "res/shaders/postprocessing.fs.glsl",
         null,
     );
     // PROJECTION
@@ -133,6 +143,7 @@ pub fn prepare(self: *Self) !void {
         true,
     );
 
+    // Systems
     self.renderer = SpriteRenderer.init(sprite_shader);
     self.particle_renderer = try ParticleGenerator.init(
         self.allocator,
@@ -140,6 +151,12 @@ pub fn prepare(self: *Self) !void {
         self.resource_manager.getTexture("particle"),
         500,
     );
+    self.postprocessor = PostProcessor.init(
+        postprocessing_shader,
+        self.width,
+        self.height,
+    );
+
     // LEVELS
     const level_names = [_][]const u8{ "one", "two", "three", "four" };
     inline for (level_names) |level_name| {
@@ -154,6 +171,7 @@ pub fn prepare(self: *Self) !void {
         try self.levels.append(level);
     }
 
+    // GameObjects
     const paddle_size: zmx.Vec2 = INITIAL_PADDLE_SIZE;
     const paddle_pos: zmx.Vec2 = .{
         @as(f32, @floatFromInt(self.width)) / 2 - paddle_size[0] / 2,
@@ -193,10 +211,17 @@ pub fn update(self: *Self, dt: f32) void {
         self.resetLevel();
         self.resetPlayer();
     }
+    if (self.shake_time > 0) {
+        self.shake_time -= dt;
+        if (self.shake_time <= 0) {
+            self.postprocessor.shake = false;
+        }
+    }
 }
 
 pub fn render(self: *Self) void {
     if (self.state == .active) {
+        self.postprocessor.beginRender();
         self.renderer.drawSprite(
             self.resource_manager.getTexture("background"),
             .{ 0, 0 },
@@ -208,6 +233,8 @@ pub fn render(self: *Self) void {
         self.paddle.draw(&self.renderer);
         self.particle_renderer.draw();
         self.ball.game_object.draw(&self.renderer);
+        self.postprocessor.endRender();
+        self.postprocessor.render(@floatCast(glfw.getTime()));
     }
 
     glx.glLogErrors(@src());
@@ -292,6 +319,9 @@ pub fn doCollisions(self: *Self) void {
                 if (col.is_colliding) {
                     if (!brick.is_solid) {
                         brick.is_destroyed = true;
+                    } else {
+                        self.shake_time = 0.1;
+                        self.postprocessor.shake = true;
                     }
                     switch (col.direction) {
                         .left, .right => {

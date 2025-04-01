@@ -88,6 +88,10 @@ pub fn setInteger(self: Self, name: [:0]const u8, value: i32, use_shader: bool) 
     );
 }
 
+pub fn setBoolean(self: Self, name: [:0]const u8, value: bool, use_shader: bool) void {
+    return self.setInteger(name, @intFromBool(value), use_shader);
+}
+
 pub fn setVector2f(self: Self, name: [:0]const u8, x: f32, y: f32, use_shader: bool) void {
     if (use_shader) self.use();
     gl.uniform2f(

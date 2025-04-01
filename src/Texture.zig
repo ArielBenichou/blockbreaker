@@ -32,7 +32,7 @@ pub fn deinit(self: Self) void {
     gl.deleteTextures(1, &self.id);
 }
 
-pub fn generate(self: *Self, width: gl.Uint, height: gl.Uint, data: *const anyopaque) void {
+pub fn generate(self: *Self, width: gl.Uint, height: gl.Uint, data: ?*const anyopaque) void {
     self.width = width;
     self.height = height;
 

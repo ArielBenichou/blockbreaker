@@ -12,7 +12,7 @@ void main() {
     gl_Position = vec4(vertex.xy, 0.0, 1.0);
     vec2 texCoords = vertex.zw;
 
-    if (chaos && false) {
+    if (chaos) {
         float strength = 0.3;
         vec2 pos = vec2(texCoords.x + sin(time) * strength, texCoords.y + cos(time) * strength);
         TexCoords = pos;

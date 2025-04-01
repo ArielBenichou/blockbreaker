@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const assert = std.debug.assert;
 const GameObject = @import("GameObject.zig");
 const ArrayList = std.ArrayList;
@@ -51,18 +52,22 @@ pub fn load(
         tile_data.deinit();
     }
 
-    var lines = std.mem.splitSequence(u8, file, "\n");
+    const line_end = if (builtin.target.os.tag == .windows) "\r\n" else "\n";
+
+    var lines = std.mem.splitSequence(u8, file, line_end);
     while (lines.next()) |line| {
         var tokens = std.mem.splitSequence(u8, line, " ");
         var row = ArrayList(BlockType).init(self.allocator);
         while (tokens.next()) |token| {
+            if (token.len == 0) continue; // because of weird '' character at EOF in windows
             const brick_type = std.fmt.parseInt(usize, token, 10) catch |err| {
                 std.log.err("Error for token '{s}': {s}", .{ token, @errorName(err) });
                 unreachable;
             };
             row.append(@enumFromInt(brick_type)) catch unreachable;
         }
-        tile_data.append(row) catch unreachable;
+        if (row.items.len > 0) // because of weird '' character at EOF in windows
+            tile_data.append(row) catch unreachable;
     }
 
     if (tile_data.items.len > 0) {

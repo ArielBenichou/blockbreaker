@@ -1,4 +1,6 @@
 const std = @import("std");
+const zaudio = @import("zaudio");
+const Sound = zaudio.Sound;
 const gl = @import("zopengl").bindings;
 const stbi = @import("zstbi");
 const Shader = @import("Shader.zig");
@@ -10,13 +12,17 @@ const Self = @This();
 shaders: std.StringHashMap(Shader),
 textures: std.StringHashMap(Texture),
 allocator: std.mem.Allocator,
+sounds: std.StringHashMap(*Sound),
+engine: *zaudio.Engine,
 
 // Public
-pub fn init(allocator: std.mem.Allocator) Self {
+pub fn init(allocator: std.mem.Allocator, engine: *zaudio.Engine) Self {
     return Self{
         .shaders = std.StringHashMap(Shader).init(allocator),
         .textures = std.StringHashMap(Texture).init(allocator),
+        .sounds = std.StringHashMap(*Sound).init(allocator),
         .allocator = allocator,
+        .engine = engine,
     };
 }
 
@@ -35,6 +41,14 @@ pub fn deinit(self: *Self) void {
             texture.deinit();
         }
         self.textures.deinit();
+    }
+
+    {
+        var it = self.sounds.valueIterator();
+        while (it.next()) |sound| {
+            sound.*.destroy();
+        }
+        self.sounds.deinit();
     }
 }
 
@@ -71,6 +85,22 @@ pub fn loadTexture(self: *Self, path: [:0]const u8, name: [:0]const u8, with_alp
 pub fn getTexture(self: Self, name: [:0]const u8) Texture {
     return self.textures.get(name) orelse {
         std.log.warn("Texture not found: '{s}'", .{name});
+        unreachable;
+    };
+}
+
+pub fn loadSound(self: *Self, path: [:0]const u8, name: [:0]const u8) !*Sound {
+    const sound = try self.engine.createSoundFromFile(
+        path,
+        .{ .flags = .{ .stream = true } },
+    );
+    try self.sounds.put(name, sound);
+    return sound;
+}
+
+pub fn getSound(self: Self, name: [:0]const u8) *Sound {
+    return self.sounds.get(name) orelse {
+        std.log.warn("Sound not found: '{s}'", .{name});
         unreachable;
     };
 }

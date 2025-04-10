@@ -86,16 +86,9 @@ pub fn main() !void {
     const engine = try zaudio.Engine.create(null);
     // FIXME: this cause seg fault on WINDOWS!
     defer engine.destroy();
-    const music = try engine.createSoundFromFile(
-        "res/music/breakout.mp3",
-        .{ .flags = .{ .stream = true } },
-    );
-    defer music.destroy();
-    music.setLooping(true);
-    try music.start();
 
     // Resources
-    var resource_manager = ResourceManager.init(allocator);
+    var resource_manager = ResourceManager.init(allocator, engine);
     defer resource_manager.deinit();
 
     // Game

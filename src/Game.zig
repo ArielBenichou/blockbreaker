@@ -203,6 +203,40 @@ pub fn prepare(self: *Self) !void {
         );
     }
 
+    // Sounds
+    const SoundConfig = struct {
+        path: [:0]const u8,
+        name: [:0]const u8,
+    };
+    const sounds_to_load = [_]SoundConfig{
+        .{
+            .path = "res/music/breakout.mp3",
+            .name = "background_music",
+        },
+        .{
+            .path = "res/sounds/bleep.mp3",
+            .name = "bleep",
+        },
+        .{
+            .path = "res/sounds/bounce.wav",
+            .name = "bounce",
+        },
+        .{
+            .path = "res/sounds/powerup.wav",
+            .name = "powerup",
+        },
+        .{
+            .path = "res/sounds/solid.wav",
+            .name = "solid",
+        },
+    };
+    inline for (sounds_to_load) |sound_config| {
+        _ = try self.resource_manager.loadSound(
+            sound_config.path,
+            sound_config.name,
+        );
+    }
+
     // Systems
     self.renderer = SpriteRenderer.init(sprite_shader);
     self.particle_renderer = try ParticleGenerator.init(
@@ -251,6 +285,11 @@ pub fn prepare(self: *Self) !void {
         INITIAL_BALL_VELOCITY,
         self.resource_manager.getTexture("face"),
     );
+
+    // Probably should be in a start function
+    const bg_music = self.resource_manager.getSound("background_music");
+    bg_music.setLooping(true);
+    try bg_music.start();
 }
 
 pub fn update(self: *Self, dt: f32) void {
@@ -441,10 +480,18 @@ pub fn doCollisions(self: *Self) void {
                     if (!brick.is_solid) {
                         brick.is_destroyed = true;
                         self.spawnPowerUp(brick.position + brick.size / zm.splat(zmx.Vec2, 2));
+                        const sfx_bleep = self.resource_manager.getSound("bleep");
+                        sfx_bleep.setVolume(0.1);
+                        sfx_bleep.seekToPcmFrame(0) catch unreachable;
+                        sfx_bleep.start() catch unreachable;
                     } else {
                         // SHAKE ON HIT SOLID
                         self.shake_time = 0.1;
                         self.postprocessor.shake = true;
+                        const sfx_solid = self.resource_manager.getSound("solid");
+                        sfx_solid.setVolume(0.4);
+                        sfx_solid.seekToPcmFrame(0) catch unreachable;
+                        sfx_solid.start() catch unreachable;
                     }
                     if (brick.is_solid or self.powerup_effect.passthrough <= 0) {
                         switch (col.direction) {
@@ -480,6 +527,10 @@ pub fn doCollisions(self: *Self) void {
                 .radius = self.ball.radius,
             });
             if (col.is_colliding) {
+                const sfx_bounce = self.resource_manager.getSound("bounce");
+                sfx_bounce.setVolume(0.2);
+                sfx_bounce.start() catch unreachable;
+
                 if (self.powerup_effect.sticky > 0) {
                     self.ball.is_stuck = true;
                     self.ball.game_object.velocity = INITIAL_BALL_VELOCITY;
@@ -502,6 +553,10 @@ pub fn doCollisions(self: *Self) void {
                 const is_colliding = collision.isCollidingAABB(self.paddle, powerup.game_object);
                 if (is_colliding) {
                     if (powerup.is_active) {
+                        const sfx_powerup = self.resource_manager.getSound("powerup");
+                        sfx_powerup.setVolume(0.2);
+                        sfx_powerup.start() catch unreachable;
+
                         powerup.is_active = false;
                         switch (powerup.powerup_type) {
                             .speed => {
@@ -548,6 +603,12 @@ fn resetLevel(self: *Self) void {
         powerup.is_active = false;
     }
     self.powerup_effect = .{};
+
+    const bg_music = self.resource_manager.getSound("background_music");
+    bg_music.stop() catch unreachable;
+    // NOTE: can use setStartTimeInPcmFrame at init instead
+    bg_music.seekToPcmFrame(0) catch unreachable;
+    bg_music.start() catch unreachable;
 }
 
 fn resetPlayer(self: *Self) void {

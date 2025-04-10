@@ -80,18 +80,19 @@ pub fn main() !void {
     defer gui.backend.deinit();
 
     // zaudio
-    // zaudio.init(allocator);
-    // defer zaudio.deinit();
+    zaudio.init(allocator);
+    defer zaudio.deinit();
 
-    // const engine = try zaudio.Engine.create(null);
-    // // FIXME: this cause seg fault
-    // defer engine.destroy();
-    // const music = try engine.createSoundFromFile(
-    //     "res/music/breakout.mp3",
-    //     .{ .flags = .{ .stream = true } },
-    // );
-    // defer music.destroy();
-    // try music.start();
+    const engine = try zaudio.Engine.create(null);
+    // FIXME: this cause seg fault on WINDOWS!
+    defer engine.destroy();
+    const music = try engine.createSoundFromFile(
+        "res/music/breakout.mp3",
+        .{ .flags = .{ .stream = true } },
+    );
+    defer music.destroy();
+    music.setLooping(true);
+    try music.start();
 
     // Resources
     var resource_manager = ResourceManager.init(allocator);

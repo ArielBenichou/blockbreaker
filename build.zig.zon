@@ -32,6 +32,10 @@
             .url = "https://github.com/zig-gamedev/zaudio/archive/refs/heads/main.tar.gz",
             .hash = "zaudio-0.11.0-dev-_M-91iBkPwDaOhCWkRhekq9IxJ_hM70TWQRru1vCitlC",
         },
+        .freetype = .{
+            .url = "https://github.com/defaultgnome/zig-build-freetype/archive/refs/heads/main.tar.gz",
+            .hash = "freetype-1.0.0-cO12NnK_pwCf_SXSS5AV1e-05Njh9resa3pbI_5DWuS0",
+        },
     },
     .paths = .{
         "build.zig",

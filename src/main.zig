@@ -8,6 +8,7 @@ const ResourceManager = @import("ResourceManager.zig");
 const stbi = @import("zstbi");
 const gui = @import("zgui");
 const builtin = @import("builtin");
+const ztype = @import("ztype/root.zig");
 
 const WINDOW_WIDTH = 800 * 1.5;
 const WINDOW_HEIGHT = 600 * 1.5;
@@ -86,6 +87,15 @@ pub fn main() !void {
     const engine = try zaudio.Engine.create(null);
     // FIXME: this cause seg fault on WINDOWS!
     defer engine.destroy();
+
+    // ztype
+    const ft = ztype.init() catch {
+        std.log.err("FREETYPE: Could not init FreeType Library", .{});
+        std.process.exit(1);
+    };
+    const font = try ft.loadFont("res/fonts/arial.ttf");
+    try font.setPixelSizes(0, 48);
+    try font.loadChar('x', .Render);
 
     // Resources
     var resource_manager = ResourceManager.init(allocator, engine);

@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) void {
         .name = "blockbreaker",
         .root_module = exe_mod,
     });
-    configGameDevDeps(b, exe, target);
+    configGameDevDeps(b, exe, target, optimize);
     b.installArtifact(exe);
 
     // RUN
@@ -34,7 +34,12 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_unit_tests.step);
 }
 
-fn configGameDevDeps(b: *std.Build, artifact: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
+fn configGameDevDeps(
+    b: *std.Build,
+    artifact: *std.Build.Step.Compile,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
     //---zglfw
     const zglfw = b.dependency("zglfw", .{
         .target = target,
@@ -67,6 +72,12 @@ fn configGameDevDeps(b: *std.Build, artifact: *std.Build.Step.Compile, target: s
     const zaudio = b.dependency("zaudio", .{});
     artifact.root_module.addImport("zaudio", zaudio.module("root"));
     artifact.linkLibrary(zaudio.artifact("miniaudio"));
+
+    const freetype = b.dependency(
+        "freetype",
+        .{ .target = target, .optimize = optimize },
+    );
+    artifact.linkLibrary(freetype.artifact("freetype"));
 
     //---system_sdk
     if (target.result.os.tag == .macos) {

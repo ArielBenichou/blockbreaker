@@ -9,6 +9,7 @@ const BallObject = @import("BallObject.zig");
 const ParticleGenerator = @import("particle.zig").ParticleGenerator;
 const PostProcessor = @import("PostProcessor.zig");
 const PowerUp = @import("PowerUp.zig");
+const TextRenderer = @import("text_renderer.zig").TextRenderer;
 const zm = @import("zmath");
 const collision = @import("collision.zig");
 const glfw = @import("zglfw");
@@ -30,6 +31,7 @@ const Self = @This();
 state: GameState,
 renderer: SpriteRenderer,
 particle_renderer: ParticleGenerator,
+text_renderer: TextRenderer,
 levels: ArrayList(GameLevel),
 level_index: usize,
 power_ups: ArrayList(PowerUp),
@@ -75,17 +77,19 @@ pub fn init(
         .ball = undefined,
         .renderer = undefined,
         .particle_renderer = undefined,
+        .text_renderer = undefined,
         .postprocessor = undefined,
     };
 }
 
-pub fn deinit(self: Self) void {
+pub fn deinit(self: *Self) void {
     for (self.levels.items) |*level| {
         level.deinit();
     }
     self.levels.deinit();
     self.particle_renderer.deinit();
     self.power_ups.deinit();
+    self.text_renderer.deinit();
 }
 
 pub fn prepare(self: *Self) !void {
@@ -130,6 +134,18 @@ pub fn prepare(self: *Self) !void {
         name: [:0]const u8,
         is_transparent: bool,
     };
+
+    // TEXT
+    self.text_renderer = try TextRenderer.init(
+        self.resource_manager,
+        self.width,
+        self.height,
+    );
+    try self.text_renderer.load(
+        self.allocator,
+        "res/fonts/ocraext.ttf",
+        24,
+    );
 
     // TEXTURES
     const textures_to_load = [_]TexConfig{
@@ -398,6 +414,8 @@ pub fn render(self: *Self) void {
         self.ball.game_object.draw(&self.renderer);
         self.postprocessor.endRender();
         self.postprocessor.render(@floatCast(glfw.getTime()));
+
+        self.text_renderer.renderText("Lives: 3", 5, 5, 1, null);
     }
 
     glx.glLogErrors(@src());

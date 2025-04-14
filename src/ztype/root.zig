@@ -15,6 +15,12 @@ pub fn init() !Self {
     };
 }
 
+pub fn deinit(self: Self) !void {
+    if (c.FT_Done_FreeType(self.ft) != 0) {
+        return error.FailedDeinitFreeFont;
+    }
+}
+
 pub fn loadFont(self: Self, path: []const u8) !FontFace {
     var face: c.FT_Face = undefined;
     if (c.FT_New_Face(self.ft, path.ptr, 0, &face) != 0) {
